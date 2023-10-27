@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.resnet import conv3x3x3, conv1x1x1, get_inplanes, ResNet
+from .ResNet import conv3x3x3, conv1x1x1, get_inplanes, ResNet
 
 
 class PreActivationBasicBlock(nn.Module):

@@ -51,7 +51,7 @@ class OfflineDataset(Dataset):
 
 if __name__=="__main__":
     # test
-    data_dir = "/home/hx/fanl/HybridBF_DeepRL/mmWaveRL/datasets"
+    data_dir = "/home/hx/fanl/HybridBF_DeepRL/datasets"
     dataset = OfflineDataset(data_dir)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
     

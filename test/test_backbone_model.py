@@ -1,28 +1,29 @@
 import torch
 from torch import nn
-from models.cnn import cnn3d
-from models import (cnn, C3DNet, resnet, ResNetV2, ResNeXt, ResNeXtV2, WideResNet, PreActResNet,
-        EfficientNet, DenseNet, ShuffleNet, ShuffleNetV2, SqueezeNet, MobileNet, MobileNetV2)
+
+import sys
+sys.path.append('../')
+from model_backbone.cnn import cnn3d
+from model_backbone import (cnn, C3DNet, ResNet, ResNetV2, ResNeXt, ResNeXtV2, WideResNet, PreActResNet, 
+                            EfficientNet, DenseNet, ShuffleNet, ShuffleNetV2, SqueezeNet, MobileNet, MobileNetV2)
 
 import argparse
 
+import pdb
 
-def parse_opts():
-    
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--manual_seed', default=1234, type=int, help='Mannual seed')
-    parser.add_argument('--cnn_name', default='ResNet', type=str, help='cnn model names')
-    parser.add_argument('--model_depth', default=101, type=str, help='model depth (18|34|50|101|152|200)')
-    parser.add_argument('--n_classes', default=2, type=str, help='model output classes')
-    parser.add_argument('--in_channels', default=1, type=str, help='model input channels (1|3)')
-    parser.add_argument('--sample_size', default=128, type=str, help='image size')
+# def parse_opts():
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('--manual_seed', default=1234, type=int, help='Mannual seed')
+#     parser.add_argument('--cnn_name', default='ResNet', type=str, help='cnn model names')
+#     parser.add_argument('--model_depth', default=101, type=str, help='model depth (18|34|50|101|152|200)')
+#     parser.add_argument('--n_classes', default=2, type=str, help='model output classes')
+#     parser.add_argument('--in_channels', default=1, type=str, help='model input channels (1|3)')
+#     parser.add_argument('--sample_size', default=128, type=str, help='image size')
+#     args = parser.parse_args()
+#     return args
 
-    args = parser.parse_args()
-
-    return args
 
 def main(cnn_name, model_depth, n_classes, in_channels, sample_size):
- 
     # simple CNN 
     if cnn_name == 'cnn':
         """
@@ -43,12 +44,12 @@ def main(cnn_name, model_depth, n_classes, in_channels, sample_size):
             in_channels=1)
 
     # ResNet
-    elif cnn_name == 'resnet':
+    elif cnn_name == 'ResNet':
         """
         3D resnet
         model_depth = [10, 18, 34, 50, 101, 152, 200]
         """
-        model = resnet.generate_model(
+        model = ResNet.generate_model(
             model_depth=model_depth,
             n_classes=n_classes,
             n_input_channels=in_channels,
@@ -210,7 +211,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--manual_seed', default=1234, type=int, help='Mannual seed')
     parser.add_argument('--cnn_name', default='ResNet', type=str, help='cnn model names')
-    parser.add_argument('--model_depth', default=101, type=str, help='model depth (18|34|50|101|152|200)')
+    parser.add_argument('--model_depth', default=50, type=str, help='model depth (18|34|50|101|152|200)')
     parser.add_argument('--n_classes', default=2, type=str, help='model output classes')
     parser.add_argument('--in_channels', default=1, type=str, help='model input channels (1|3)')
     parser.add_argument('--sample_size', default=128, type=str, help='image size')
@@ -220,8 +221,12 @@ if __name__ == '__main__':
                  model_depth=args.model_depth,
                  n_classes=args.n_classes,
                  in_channels=args.in_channels,
-                 sample_size=args.sample_sizes
+                 sample_size=args.sample_size
                 )
+    
+    print(model)
+
+
 
 
 

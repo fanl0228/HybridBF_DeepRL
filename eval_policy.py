@@ -6,9 +6,10 @@ from tqdm import trange
 from coolname import generate_slug
 import time
 import json
-from log import Logger
+
 
 import utils
+from utils.log import Logger
 
 
 import pdb

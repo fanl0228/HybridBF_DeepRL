@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from models import c3d, squeezenet, mobilenet, shufflenet, mobilenetv2, shufflenetv2, resnext, resnet
+import c3d, squeezenet, mobilenet, shufflenet, mobilenetv2, shufflenetv2, resnext, resnet
 
 
 def generate_model(opt):
