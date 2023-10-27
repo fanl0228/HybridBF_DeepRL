@@ -17,10 +17,11 @@ from dataloader.h5py_opts import read_h5py_file
 
 from agents.IQLPolicy import IQLpolicy
 
-#from eval_policy import eval_policy
+from agents.eval_policy import eval_policy
 
 import pdb
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -29,14 +30,15 @@ def get_parsers():
     parser = argparse.ArgumentParser()
     # Experiment
     parser.add_argument("--policy", default="IQLpolicy")                  # Policy name
-    parser.add_argument("--train_dataset", default="/home/hx/fanl/HybridBF_DeepRL/datasets/train")
-    parser.add_argument("--test_dataset", default="/home/hx/fanl/HybridBF_DeepRL/datasets/test")                    # dataset path
+    parser.add_argument("--train_dataset", default="/data/mmWaveRL_Datasets/train")
+    parser.add_argument("--test_dataset", default="/data/mmWaveRL_Datasets/test")                    # dataset path
     parser.add_argument("--seed", default=3, type=int)              #  
-    parser.add_argument("--eval_freq", default=100, type=int)       # How often (time steps) we evaluate
-    parser.add_argument("--sample_epochs", default=100, type=int)  
+    parser.add_argument("--eval_freq", default=1, type=int)       # How often (time steps) we evaluate
+    parser.add_argument("--train_sample_epochs", default=100, type=int)  
     parser.add_argument("--max_timesteps", default=1e3, type=int)   # Max time steps to run environment
-    parser.add_argument("--save_model", action="store_true", default=False)        # Save model and optimizer parameters
-    parser.add_argument('--eval_episodes', default=10, type=int)
+    parser.add_argument("--save_model", default=False, action="store_true")        # Save model and optimizer parameters
+    parser.add_argument('--eval_episodes', default=5, type=int)
+    parser.add_argument('--eval_sample_epochs', default=100, type=int)
     parser.add_argument('--save_video', default=False, action='store_true')
     parser.add_argument("--normalize", default=True, action='store_true')
     parser.add_argument("--debug", default=False, action='store_true')
@@ -104,15 +106,17 @@ def train(args):
     logger = Logger(args.work_dir, use_tb=True)
 
     # Dataset
-    dataset = OfflineDataset(args.train_dataset)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
+    train_dataset = OfflineDataset(args.train_dataset)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False)
+    test_dataset = OfflineDataset(args.test_dataset)
+    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
     
     for t in trange(int(args.max_timesteps)):
     
-        for sample_path in dataloader:
+        for sample_path in train_dataloader:
             data_dict = read_h5py_file(sample_path[0])
 
-            for idx in range(args.sample_epochs):
+            for idx in range(args.train_sample_epochs):
                 ''' Data preprocessing and to tensor
                 '''
                 hybridBFAction = V(hybridBFAction_buffer)
@@ -124,7 +128,6 @@ def train(args):
 
                 # to tensor
                 observationsRDA = torch.from_numpy(10*np.log10(abs(observationsRDA) ) )
-                # hybridBFAction = torch.from_numpy(hybridBFAction)
                 rewards = torch.from_numpy(rewards)
 
                 # [frame, range, Doppler, ant] --> [Doppler, frame, range, ant]
@@ -140,19 +143,19 @@ def train(args):
                 
                 hybridBFAction_buffer = policy.train(observationsRDA, hybridBFAction, rewards, next_state, not_done, batch_size=observationsRDA.size(0), logger=logger)
                 
-
                 if args.debug:
                     print("---->sample iter:{}, observationsRDA size:{}, txbf_idx: {}".format(idx, observationsRDA.size(), txbf_idx))
                 
+        print("time step:{}, \t eval_policy------>\n".format(t))    
+        # Evaluation episode
+        if 1:#(t+1) % args.eval_freq == 0:
+            eval_episodes = 100 if t+1 == int(args.max_timesteps) else args.eval_episodes
             
-            # # Evaluation episode
-            # if (t+1) % args.eval_greq == 0:
-            #     eval_episodes = 100 if t+1 == int(args.max_timesteps) else args.eval_episodes
-           
-            #     eval_score = eval_policy(args, t+1, logger, policy, eval_episodes=eval_episodes)
-
-            #     if args.save_model:
-            #         policy.save(args.model_dir)
+            eval_score = eval_policy(args, t+1, logger, policy, test_dataloader, eval_episodes)
+            print("-->eval_score:{}".format(eval_score)) 
+            
+            if args.save_model:
+                policy.save(args.model_dir)
 
 
 if __name__=="__main__":

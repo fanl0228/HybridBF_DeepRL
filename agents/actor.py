@@ -47,11 +47,14 @@ class Actor(nn.Module):
         return x_txbf, x_rxbf
 
     def get_action(self, states):
+        x_txbf, x_rxbf = self.forward(states)
+
         act_txbf = self.softmax_txbf(x_txbf)
         act_rxbf = self.softmax_rxbf(x_rxbf)
-
-        x_txbf, x_rxbf = self.forward(states)
-        return act_txbf, act_rxbf
+        
+        HBFact = torch.cat((act_txbf, act_rxbf), axis=0)
+        
+        return HBFact
         
 
 

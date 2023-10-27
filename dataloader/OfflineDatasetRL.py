@@ -16,24 +16,30 @@ import os
 import pdb
 
 # User custom
-from .h5py_opts import read_h5py_file
+import sys
+sys.path.append("../")
+from dataloader.h5py_opts import read_h5py_file
 
 
-class OfflineDataset(Dataset):
+class OfflineDatasetRL(Dataset):
     def __init__(self, data_dir):
         self.data_dir = data_dir
-        self.files = os.listdir(data_dir)
-        self.h5py_samples = []
+        self.h5py_samples = os.listdir(data_dir)
+        # self.transform = transforms.Compose([
+        #     #transforms.Resize((224, 224)),
+        #     transforms.ToTensor()
+        # ])
 
-        for i in range(len(self.files)):
-            if self.files[i].split('.')[-1] == 'h5':
-                self.h5py_samples.append(self.files[i])
+        for i in range(len(self.h5py_samples)):
+            sample_path = os.path.join(self.data_dir, self.h5py_samples[idx])
+            data_dict = read_h5py_file(sample_path[0])
 
 
     def __len__(self):
         return len(self.h5py_samples)
 
     def __getitem__(self, idx):
+
         sample_path = os.path.join(self.data_dir, self.h5py_samples[idx])
         
         return sample_path
@@ -43,7 +49,7 @@ class OfflineDataset(Dataset):
 if __name__=="__main__":
     # test
     data_dir = "/home/hx/fanl/HybridBF_DeepRL/datasets/train"
-    dataset = OfflineDataset(data_dir)
+    dataset = OfflineDatasetRL(data_dir)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
     
     pdb.set_trace()

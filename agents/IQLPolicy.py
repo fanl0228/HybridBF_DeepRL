@@ -139,8 +139,10 @@ class IQLpolicy(object):
 
     
     def select_action(self, state):
-        state = torch.FloatTensor(state.reshape(1, -1)).to(device)        
-        return self.actor.get_action(state).cpu().data.numpy().flatten()
+        #state = torch.FloatTensor(state.reshape(1, -1)).to(device)
+        #pdb.set_trace()
+        HBFaction = self.actor.get_action(state).cpu().data.numpy()#.flatten()    
+        return HBFaction
 
     
     def train(self, observations, actions, rewards, next_state, not_done, batch_size=1, logger=None):
