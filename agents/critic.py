@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from agents.MLP_model import MLP
 from agents.backboneRL import BackboneRL
 
+
 class ValueCritic(nn.Module):
     def __init__(self, 
                 state_shape,    # [batch, Doppler, frame, range, ant]
@@ -38,7 +39,8 @@ class ActionCritic(nn.Module):
                 action_shape,     # [tx/rxbf, beams] = [2, 121]
                 ):
         super(ActionCritic, self).__init__()
-
+        
+        self.batch_size = state_shape[0]
         self.nDoppler = state_shape[1]
         self.txbf_output_dim = action_shape[0]
         self.rxbf_output_dim = action_shape[1]
@@ -59,11 +61,12 @@ class ActionCritic(nn.Module):
         self.l6 = nn.Linear(256, 1)
 
     def forward(self, state, action):
-
+        
         state = self.backbone_state(state)  #[1, 2048]
 
-        action = action.view(1, -1)
-        
+        #action = action.view(1, -1)
+        #     
+        action = action.view(self.batch_size, -1)   
         action = self.backbone_action(action)  # [1, 512]
         
         feature = torch.cat([state, action], axis=1)

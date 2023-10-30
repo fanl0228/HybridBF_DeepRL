@@ -123,9 +123,12 @@ class IQLpolicy(object):
             exp_a = torch.clamp(exp_a, max=100.0).squeeze(-1).detach()
 
         act_txbf, act_rxbf = self.actor(states)
-        HBFact = torch.cat((act_txbf, act_rxbf), axis=0)
         
-        actor_loss = (exp_a.unsqueeze(-1) * ((HBFact - actions)**2)).mean()
+        act_txbf = act_txbf.unsqueeze(1)
+        act_rxbf = act_rxbf.unsqueeze(1)
+        HBFact = torch.cat((act_txbf, act_rxbf), axis=1)
+        
+        actor_loss = (exp_a.unsqueeze(-1) * ((HBFact - actions)**2).view(exp_a.size(0),-1)).mean()
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
@@ -141,7 +144,16 @@ class IQLpolicy(object):
     def select_action(self, state):
         #state = torch.FloatTensor(state.reshape(1, -1)).to(device)
         #pdb.set_trace()
-        HBFaction = self.actor.get_action(state).cpu().data.numpy()#.flatten()    
+
+        act_txbf, act_rxbf  = self.actor.get_action(state)#.cpu().data.numpy()#.flatten() 
+        
+        #act_txbf = self.softmax_txbf(act_txbf)
+        #act_rxbf = self.softmax_rxbf(act_rxbf)
+
+        act_txbf = act_txbf.unsqueeze(1)
+        act_rxbf = act_rxbf.unsqueeze(1)
+        HBFaction = torch.cat((act_txbf, act_rxbf), axis=1)
+
         return HBFaction
 
     

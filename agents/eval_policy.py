@@ -2,12 +2,13 @@ import numpy as np
 import torch
 import argparse
 import os
+
+from tqdm import tqdm
 from tqdm import trange
 from coolname import generate_slug
 import time
 import json
 from torch.autograd import Variable as V
-
 
 import utils
 from utils.log import Logger
@@ -28,75 +29,81 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, eval_episod
     tx_rx_spacae_dim = 121   # txbf and rxbf search space [0:121] --> angle [-60, +60]
     #hybridBFAction_buffer = torch.rand(2, tx_rx_spacae_dim).cuda()
     
-    hybridBFAction = np.zeros((2, tx_rx_spacae_dim))
+    hybridBFAction_buffer = torch.rand(args.batch_size, 2, tx_rx_spacae_dim).cuda()
+
+    #hybridBFAction = np.rand((args.batch_size, 2, tx_rx_spacae_dim))
     
     lengths = []
     returns = []
     avg_reward = 0.
-    
-    for _ in range(eval_episodes):
-        
-        for sample_path in test_dataloader:
-            data_dict = read_h5py_file(sample_path[0])
-
-            #pdb.set_trace()
+    eval_score = [] 
+    for data_dict_batch in tqdm(test_dataloader, desc="Loading test datafile"):
+        for _ in trange(int(eval_episodes), desc="Test Epoch"):
             
-            done = False
             steps = 0
             episode_return = 0
+            isDone = torch.zeros((data_dict_batch['terminals'].size(0), 1))
+            
             #while not done:
-            while steps < args.eval_sample_epochs:
+            while (isDone.mean().cpu().item() == 0):
+                if (steps > args.eval_max_steps):
+                    break
                 # Normalize
                 #state = (np.array(state).reshape(1, -1) - mean)/std
-                # video.init(enabled=(args.save_video and _ == 0))
                 
-                txbf_idx = np.argmax(hybridBFAction[0])#.item()
-                observationsRDA = data_dict['observationsRDA'][txbf_idx]   # [frame, range, Doppler, ant] = [10, 64, 128, 16]
-                # to tensor
-                observationsRDA = torch.from_numpy(10*np.log10(abs(observationsRDA) ) )
-                # [frame, range, Doppler, ant] --> [Doppler, frame, range, ant]
-                observationsRDA = observationsRDA.permute(2, 0, 1, 3)
-                # add batch dim,  [batch, Doppler, frame, range, ant]
-                observationsRDA = torch.unsqueeze(observationsRDA, 0)
+                hybridBFAction = V(hybridBFAction_buffer)
+                txbf_idxs = torch.argmax(hybridBFAction[:, 0, :], -1).tolist()  # [batch, tx]
+                #isDone = torch.zeros((data_dict_batch['terminals'].size(0), len(txbf_idxs)))
+                rewards = torch.zeros((data_dict_batch['rewards_Phase'].size(0), 1))
+                # init data buffer
+                observationsRDA = torch.zeros((data_dict_batch['observationsRDA'].size(0), 
+                                            1, 
+                                            data_dict_batch['observationsRDA'].size(2), 
+                                            data_dict_batch['observationsRDA'].size(3),
+                                            data_dict_batch['observationsRDA'].size(4),
+                                            data_dict_batch['observationsRDA'].size(5)
+                                            ))
+
+                for b in range(data_dict_batch['observationsRDA'].size(0)):
+                    observationsRDA[b,...] = data_dict_batch['observationsRDA'][b, txbf_idxs[b], ...] # observationsRDA: [frame, range, Doppler, ant] = [b, 10, 64, 128, 16]
+                    rewards[b] = data_dict_batch['rewards_Phase'][b, txbf_idxs[b]]
+                    isDone[b]= data_dict_batch['terminals'][b, txbf_idxs[b]]
+                
+                observationsRDA = observationsRDA.squeeze()
+                # [batch, frame, range, Doppler, ant] --> [batch, Doppler, frame, range, ant]
+                observationsRDA = observationsRDA.permute(0, 3, 1, 2, 4)
+                
+                # to device
+                rewards = rewards.to(device, non_blocking=True)  
+                isDone = isDone.to(device, non_blocking=True)
+                hybridBFAction = hybridBFAction.to(device, non_blocking=True)   
                 observationsRDA = observationsRDA.to(device, non_blocking=True) 
+                next_state = torch.rand(observationsRDA.shape).to(device, non_blocking=True)   # TODO torch.zeros()
+                              
+                hybridBFAction_buffer = policy.select_action(observationsRDA)
                 
-                #
-                #hybridBFAction = V(hybridBFAction_buffer) 
-                
-                hybridBFAction = policy.select_action(observationsRDA)
-                
-                #pdb.set_trace()
-
-                # given action return state
-                # txbf_idx = np.argmax(hybridBFAction[0])#.item()
-                
-                # observationsRDA = data_dict['observationsRDA'][txbf_idx] 
-                
-                reward = data_dict['rewards_PSINR'][txbf_idx] 
-                #done = data_dict['done'][txbf_idx] 
-
-
-                avg_reward += reward
-                episode_return += reward
+                avg_reward += rewards
+                episode_return += rewards
                 steps += 1
 
-                #print("----> reward:{}, episode_return:{}, txbf_idx:{} ".format(reward, episode_return, txbf_idx))
+                #print("----> step:{}, reward:{}, isDone:{}, txbf_idx:{} ".format(steps, rewards, isDone, txbf_idxs))
             lengths.append(steps)
             returns.append(episode_return)
-            # video.save(f'eval_s{iter}_r{str(episode_return)}.mp4')
-
-    avg_reward /= eval_episodes
     
-    # TODO: eval socre
-    eval_score = avg_reward
 
-    logger.log('eval/lengths_mean', np.mean(lengths), iter)
-    logger.log('eval/lengths_std', np.std(lengths), iter)
-    logger.log('eval/returns_mean', np.mean(returns), iter)
-    logger.log('eval/returns_std', np.std(returns), iter)
-    logger.log('eval/eval_score', eval_score, iter)
+        avg_reward /= eval_episodes
+        
+        # TODO: eval socre
+        eval_score.append(avg_reward)
 
-    print("---------------------------------------")
-    print("Evaluation over: {} episodes: {}".format(eval_episodes, eval_score))
-    print("---------------------------------------")
+        logger.log('eval/lengths_mean', np.mean(lengths), iter)
+        logger.log('eval/lengths_std', np.std(lengths), iter)
+        logger.log('eval/returns_mean', np.mean(returns[0].cpu().data.numpy()), iter)
+        logger.log('eval/returns_std', np.std(returns[0].cpu().data.numpy()), iter)
+        logger.log('eval/eval_score', np.mean(eval_score.cpu().data.numpy()), iter)
+
+    eval_score = np.mean(eval_score)
+    # print("---------------------------------------")
+    # print("Evaluation over: {} episodes: {}".format(eval_episodes, eval_score))
+    # print("---------------------------------------")
     return eval_score

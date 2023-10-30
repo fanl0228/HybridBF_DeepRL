@@ -94,7 +94,7 @@ def get_keys(h5file):
 def read_h5py_file(h5path):
     data_dict = {}
     with h5py.File(h5path, 'r') as dataset_file:
-        for k in tqdm(get_keys(dataset_file), desc="load datafile"):
+        for k in get_keys(dataset_file):
             try:  # first try loading as an array
                 data_dict[k] = dataset_file[k][:]
             except ValueError as e:  # try loading as a scalar

@@ -16,98 +16,72 @@ import os
 import pdb
 
 # User custom
-from .h5py_opts import read_h5py_file
+import sys
+sys.path.append("../")
+from dataloader.h5py_opts import read_h5py_file
+
+
+def convert_dict_to_float32(input_dict):
+    output_dict = {}
+    for key, value in input_dict.items():
+        if isinstance(value, dict):
+            output_dict[key] = convert_dict_to_float32(value) 
+        elif isinstance(value, torch.Tensor):
+            output_dict[key] = value.to(torch.float32)
+        else:
+            output_dict[key] = value
+    return output_dict
 
 
 class OfflineDataset(Dataset):
     def __init__(self, data_dir):
         self.data_dir = data_dir
         self.files = os.listdir(data_dir)
-        self.h5py_samples = []
-
+        self.h5py_paths = []
+        self.data = []
+        
         for i in range(len(self.files)):
             if self.files[i].split('.')[-1] == 'h5':
-                self.h5py_samples.append(self.files[i])
-
+                self.h5py_paths.append(os.path.join(self.data_dir, self.files[i]))
 
     def __len__(self):
-        return len(self.h5py_samples)
+        return len(self.h5py_paths)
+
 
     def __getitem__(self, idx):
-        sample_path = os.path.join(self.data_dir, self.h5py_samples[idx])
-        
-        return sample_path
 
+        data_dict = read_h5py_file(self.h5py_paths[idx])
+        #data_dict = convert_dict_to_float32(data_dict)
+        return data_dict
 
 
 if __name__=="__main__":
     # test
-    data_dir = "/home/hx/fanl/HybridBF_DeepRL/datasets/train"
+    data_dir = "/data/mmWaveRL_Datasets/train1"
     dataset = OfflineDataset(data_dir)
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+    dataloader = DataLoader(dataset, batch_size=2, shuffle=False)
     
-    pdb.set_trace()
+    txbf_idx = 0    
     
     # 遍历dataloader
-    for sample_path in dataloader:
+    for data_dict_batch in tqdm(dataloader, desc="load datafile"):
+        print(data_dict_batch.keys())
         
-        data_dict = read_h5py_file(sample_path[0])
-
-        print(data_dict.keys())
-        print('---> observationsRD shape:{}'.format(data_dict['observationsRD'].shape))
-        print('---> observationsRA shape:{}'.format(data_dict['observationsRA'].shape))
-        print('---> rewards_PSINR shape:{}'.format(data_dict['rewards_PSINR'].shape))
-        print('---> rewards_Intensity shape:{}'.format(data_dict['rewards_Intensity'].shape))
-        print('---> rewards_Phase shape:{}'.format(data_dict['rewards_Phase'].shape))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# class OfflineDatasetEnv(gym.Env):
-#     """
-#         Base class for offline RL envs.
-#     """
-
-#     def __init__(self, dataset_url=None, **kwargs):
-#         super(OfflineDatasetEnv, self).__init__(**kwargs)
-#         self.dataset_url = dataset_url
-
-
-#     @property
-#     def dataset_filepath(self):
-#         return self.dataset_url
-    
-#     def get_dataset(self, h5path=None):
-#         if self._dataset_url is None:
-#             if h5path is None:
-#                 raise ValueError("Offline env not configured with a dataset URL.")
-
-#         data_dict = {}
-#         data_dict = read_h5py_file(h5path)
+        pdb.set_trace()
+        # observationsRDA: [frame, range, Doppler, ant] = [b, 10, 64, 128, 16]
+        observationsRDA = data_dict_batch['observationsRDA'][:, txbf_idx, ...].squeeze()
+        observationsRDA = observationsRDA.permute(3, 1, 2, 4)
         
-#         # Run a few quick sanity checks
-#         for key in ['observationsRD', 'observationsRA', 'rewards_PSINR', 'rewards_Intensity', 'rewards_Phase']:
-#             assert key in data_dict, 'Dataset is missing key %s' % key
+        rewards = data_dict_batch['Phase_estSINR'][:, txbf_idx, ...].squeeze()
+        done = data_dict_batch['terminals'][:, txbf_idx, ...].squeeze()
+        #hybridBFAction = 
 
-#         N_TxBeams = data_dict['observationsRD'].shape[0]
+        observationsRDA = observationsRDA.to(device, non_blocking=True) 
+        #hybridBFAction = hybridBFAction.to(device, non_blocking=True)   
+        rewards = rewards.to(device, non_blocking=True)   
+        done = done.to(device, non_blocking=True) 
 
-#         return data_dict
-
-#     def get_action_space(self,):
-
-
+        
+        print('---> observationsRD shape:{}'.format(observationsRDA.shape))
 
 

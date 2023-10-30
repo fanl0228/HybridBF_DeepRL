@@ -11,7 +11,7 @@ class Actor(nn.Module):
     def __init__(
         self, 
         state_shape,    # [batch, Doppler, frame, range, ant]
-        action_shape,     # [tx/rxbf, beams] = [2, 121]
+        action_shape,     # [tx/rxbf, beams] = [bs, 2, 121]
         dropout_rate=None,
         log_std_min=-10.0, 
         log_std_max=2.0,
@@ -21,8 +21,8 @@ class Actor(nn.Module):
         self.log_std_max = log_std_max
         
         self.nDoppler = state_shape[1]
-        self.txbf_output_dim = action_shape[0]
-        self.rxbf_output_dim = action_shape[1]
+        self.txbf_output_dim = action_shape[1]
+        self.rxbf_output_dim = action_shape[2]
 
         self.backbone = BackboneRL(model_depth=50, nDoppler=self.nDoppler, output_dim=2048)
 
@@ -52,9 +52,9 @@ class Actor(nn.Module):
         act_txbf = self.softmax_txbf(x_txbf)
         act_rxbf = self.softmax_rxbf(x_rxbf)
         
-        HBFact = torch.cat((act_txbf, act_rxbf), axis=0)
+        # HBFact = torch.cat((act_txbf, act_rxbf), axis=0)
         
-        return HBFact
+        return act_txbf, act_rxbf
         
 
 
