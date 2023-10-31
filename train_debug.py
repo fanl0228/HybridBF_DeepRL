@@ -1,12 +1,11 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import numpy as np
 import torch
 import argparse
 from tqdm import tqdm
 from tqdm import trange
-from coolname import generate_slug
 import time
 import json
 import math
@@ -18,6 +17,7 @@ from utils.log import Logger
 from utils.common import make_dir, snapshot_src 
 from dataloader import OfflineDataset
 from dataloader.h5py_opts import read_h5py_file
+from dataloader.ReplayBuffer import ReplayBuffer
 
 from agents.IQLPolicy import IQLpolicy
 
@@ -35,24 +35,24 @@ def get_parsers():
     parser.add_argument("--train_dataset", default="/data/mmWaveRL_Datasets/train1")
     parser.add_argument("--test_dataset", default="/data/mmWaveRL_Datasets/test1")                    # dataset path
     parser.add_argument("--seed", default=3, type=int)              #  
-    parser.add_argument("--train_max_steps", default=10, type=int)   # Max time steps to run environment
-    parser.add_argument("--train_episodes", default=10, type=int)
+    parser.add_argument("--train_max_steps", default=1e4, type=int)   # Max time steps to run environment
+    parser.add_argument("--train_episodes", default=100, type=int)
     parser.add_argument("--save_model", default=True, action="store_true")        # Save model and optimizer parameters
     parser.add_argument("--eval_freq", default=1, type=int)       # How often (time steps) we evaluate
-    parser.add_argument('--eval_max_steps', default=1, type=int)
-    parser.add_argument('--eval_episodes', default=1, type=int)
+    parser.add_argument('--eval_max_steps', default=1000, type=int)
+    parser.add_argument('--eval_episodes', default=10, type=int)
     parser.add_argument('--save_video', default=False, action='store_true')
     parser.add_argument("--normalize", default=True, action='store_true')
     parser.add_argument("--debug", default=False, action='store_true')
     # IQL
-    parser.add_argument("--batch_size", default=2, type=int)      # Batch size default is 1
+    parser.add_argument("--batch_size", default=8, type=int)      # Batch size default is 1
     parser.add_argument("--temperature", default=3.0, type=float)
     parser.add_argument("--expectile", default=0.7, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
     parser.add_argument("--discount", default=0.99, type=float)     # Discount factor
     # Work dir
-    parser.add_argument('--work_dir', default='tmp1', type=str)
-    parser.add_argument('--model_dir', default='runs/savemodel1', type=str)
+    parser.add_argument('--work_dir', default='tmp_debug', type=str)
+    parser.add_argument('--model_dir', default='runs/savemodel_debug', type=str)
     args = parser.parse_args()
 
     # Build work dir
@@ -83,7 +83,7 @@ def train(args):
     # Rxbf paramer
     mmWave_f0 = 7.7e10
     mmWave_d = 0.5034
-    mmWave_D_BF = torch.tensor([0, 1, 2, 3, 11, 12, 13, 14, 46, 47, 48, 49, 50, 51, 52, 53])
+    mmWave_D_BF = np.array([0, 1, 2, 3, 11, 12, 13, 14, 46, 47, 48, 49, 50, 51, 52, 53])
 
     # Initialize policy
     torch.manual_seed(args.seed)
@@ -101,10 +101,18 @@ def train(args):
         "expectile": args.expectile,
     }
 
-    hybridBFAction_buffer = torch.rand(args.batch_size, 2, tx_rx_spacae_dim).cuda()
-    observationsRDA_buffer = torch.rand(args.batch_size, 128, 10, 64, 16).cuda()
-    #next_observationsRDA_buffer = torch.rand(args.batch_size, 1, 128, 10, 64, 16).cuda()
+    # hybridBFAction_buffer = np.rand(args.batch_size, 2, tx_rx_spacae_dim).cuda()
+    # observationsRDA_buffer = torch.rand(args.batch_size, 128, 10, 64, 16).cuda()
 
+    hybridBFAction = np.random.randn(2, tx_rx_spacae_dim)
+    observationsRDA = np.random.randn(128, 10, 64, 16)
+    next_observationsRDA = np.random.randn(128, 10, 64, 16)
+    rewards = np.zeros((1,))
+    isDone = np.zeros((1,))
+    
+    replay_buffer = ReplayBuffer([128, 10, 64, 16], [2, tx_rx_spacae_dim])
+    
+    
     if args.policy == 'IQLpolicy':
         policy = IQLpolicy(**kwargs) 
     else:
@@ -119,82 +127,71 @@ def train(args):
 
     # Dataset
     train_dataset = OfflineDataset(args.train_dataset)
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)
     test_dataset = OfflineDataset(args.test_dataset)
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=True)
     
-    for t in trange(int(args.train_episodes), desc="Train Epoch"):
+    train_data_filenumbers = len(os.listdir(args.train_dataset))
 
+    for t in trange(int(args.train_episodes), desc="Train Epoch"):
+        
+        sample_num = 0
         for data_dict_batch in tqdm(train_dataloader, desc="Loading train datafile"):
 
             for epoch in trange(int(args.train_max_steps), desc="Train Epoch"):
+
                 ''' Data preprocessing and to tensor
                 '''
-                #pdb.set_trace()
-                hybridBFAction = V(hybridBFAction_buffer)
-                observationsRDA = V(observationsRDA_buffer)
+                txbf_idxs = np.argmax(hybridBFAction[0, :])  # [batch, txbf]
+                rxbf_idxs = np.argmax(hybridBFAction[1, :])  # [batch, rxbf]
                 
-                txbf_idxs = torch.argmax(hybridBFAction[:, 0, :], -1).tolist()  # [batch, txbf]
-                rxbf_idxs = torch.argmax(hybridBFAction[:, 1, :], -1).tolist()  # [batch, rxbf]
+                # init data buffer 
+                # 1. observationsRDA: [frame, range, Doppler, ant] = [b, 10, 64, 128, 16]
+                next_observationsRDA = data_dict_batch['observationsRDA'][0, txbf_idxs, ...].numpy()
                 
-                # init data buffer
-                next_observationsRDA = torch.zeros((data_dict_batch['observationsRDA'].size(0), 
-                                                1, 
-                                                data_dict_batch['observationsRDA'].size(2), 
-                                                data_dict_batch['observationsRDA'].size(3),
-                                                data_dict_batch['observationsRDA'].size(4),
-                                                data_dict_batch['observationsRDA'].size(5)
-                                                ))
-                rewards = torch.zeros((data_dict_batch['rewards_Phase'].size(0), 1))
-                isDone = torch.zeros((data_dict_batch['terminals'].size(0), 1))
+                # 2. action RXBF, rx antenna is 16
+                mmWave_WX = math.sin(rxbf_idxs*math.pi/180)
+                mmWave_RXBF_V = np.exp(-1j*2*math.pi*mmWave_f0*mmWave_d*mmWave_D_BF*mmWave_WX)
+                next_observationsRDA = next_observationsRDA * mmWave_RXBF_V
+                next_observationsRDA = 10*np.log10(abs(next_observationsRDA) + 1e-8) # abs - 10*log10           
                 
-                for b in range(data_dict_batch['observationsRDA'].size(0)):
-                    # 1. observationsRDA: [frame, range, Doppler, ant] = [b, 10, 64, 128, 16]
-                    next_observationsRDA[b,...] = data_dict_batch['observationsRDA'][b, txbf_idxs[b], ...]
-                    
-                    # 2. action RXBF, rx antenna is 16
-                    mmWave_WX = torch.sin(torch.tensor(rxbf_idxs[b]*math.pi/180))
-                    mmWave_RXBF_V = torch.exp(-1j*2*math.pi*mmWave_f0*mmWave_d*mmWave_D_BF*mmWave_WX)
-                    next_observationsRDA[b,...] = next_observationsRDA[b,...] * mmWave_RXBF_V
-                    next_observationsRDA[b,...] = 10*torch.log10(abs(next_observationsRDA[b,...]) + 1e-8) # abs - 10*log10           
-                    
-                    # 3. Normalize
-                    next_observationsRDA_mean = next_observationsRDA[b,...].mean()
-                    next_observationsRDA_std = next_observationsRDA[b,...].std()
-                    next_observationsRDA[b,...] = (next_observationsRDA[b,...] - next_observationsRDA_mean)/next_observationsRDA_std
+                # 3. Normalize
+                next_observationsRDA_mean = next_observationsRDA.mean()
+                next_observationsRDA_std = next_observationsRDA.std() + 1e-3
+                next_observationsRDA = (next_observationsRDA - next_observationsRDA_mean)/next_observationsRDA_std
 
-                    rewards[b, :] = data_dict_batch['rewards_Phase'][b, txbf_idxs[b]]
-                    isDone[b, :]= data_dict_batch['terminals'][b, txbf_idxs[b]]
+                rewards = data_dict_batch['rewards_Phase'][0, txbf_idxs].numpy()
+                isDone= data_dict_batch['terminals'][0, txbf_idxs].numpy()
                 
-                next_observationsRDA = next_observationsRDA.squeeze(1)
                 # [batch, frame, range, Doppler, ant] --> [batch, Doppler, frame, range, ant]
-                next_observationsRDA = next_observationsRDA.permute(0, 3, 1, 2, 4)
+                next_observationsRDA = next_observationsRDA.transpose(2, 0, 1, 3)
+ 
                 
-
-                # to device
-                hybridBFAction = hybridBFAction.to(device, non_blocking=True)   
-                next_observationsRDA = next_observationsRDA.to(device, non_blocking=True) 
-                rewards = rewards.to(device, non_blocking=True)
-                isDone = isDone.to(torch.bool).to(device, non_blocking=True)  
-                #next_state = torch.rand(observationsRDA.shape).to(device, non_blocking=True)   # TODO torch.zeros()
-
-                # train
-                hybridBFAction_buffer = policy.train(observationsRDA, hybridBFAction, rewards, next_observationsRDA, ~isDone, logger=logger)
+                replay_buffer.add(observationsRDA, hybridBFAction, next_observationsRDA, rewards, isDone)
                 
-                observationsRDA = next_observationsRDA.clone()
+                hybridBFAction = policy.select_action(torch.FloatTensor(next_observationsRDA).unsqueeze(0).to(device)).cpu().data.numpy().squeeze(0)
+                #hybridBFAction = hybridBFAction.numpy()
+                observationsRDA = np.copy(next_observationsRDA)
 
-                if args.debug:
-                    print("---->sample iter:{}, next_observationsRDA size:{}, txbf_idx: {}".format(t, next_observationsRDA.size(), txbf_idxs))
-                    
-        # Evaluation episode
-        if (t+1) % args.eval_freq == 0: 
+                if (epoch+1) % args.batch_size == 0:
+                    # train model
+                    policy.train(replay_buffer, args.batch_size, logger=logger)
 
-            #eval_episodes = 100 if t+1 == int(args.max_timesteps) else args.eval_episodes
+                # logger
+                logger.log('train/txbf_idxs[0]', txbf_idxs, int(args.train_max_steps)*sample_num+(train_data_filenumbers*t)+epoch)
+                logger.log('train/rxbf_idxs[0]', rxbf_idxs, int(args.train_max_steps)*sample_num+(train_data_filenumbers*t)+epoch)
+                
+                
+                if 1:
+                    train_num = int(args.train_max_steps)*sample_num+(train_data_filenumbers*t) + epoch 
+                    print("---->sample iter:{}, next_observationsRDA size:{}, txbf_idx: {}".format(train_num, next_observationsRDA.shape, txbf_idxs))
+        
+            # Evaluation episode
+            # train_num = int(args.train_max_steps)*t+(train_data_filenumbers * sample_num) + epoch 
+            # eval_score = eval_policy(args, train_num+1, logger, policy, test_dataloader, args.eval_episodes)
+            # print("------------------Evaluation over t: {} episodes: {}".format(train_num, eval_score))
             
-            eval_score = eval_policy(args, t+1, logger, policy, test_dataloader, args.eval_episodes)
-
-            print("------------------Evaluation over: {} episodes: {}".format(args.eval_episodes, eval_score))
-
+            sample_num += 1
             
     if args.save_model:
         policy.save(args.model_dir)

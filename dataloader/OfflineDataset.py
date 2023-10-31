@@ -21,6 +21,8 @@ sys.path.append("../")
 from dataloader.h5py_opts import read_h5py_file
 
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 def convert_dict_to_float32(input_dict):
     output_dict = {}
     for key, value in input_dict.items():

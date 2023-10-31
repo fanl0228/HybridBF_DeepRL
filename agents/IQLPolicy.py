@@ -146,23 +146,25 @@ class IQLpolicy(object):
         act_txbf, act_rxbf  = self.actor.get_action(state)#.cpu().data.numpy()#.flatten() 
         act_txbf = act_txbf.unsqueeze(1)
         act_rxbf = act_rxbf.unsqueeze(1)
+        
         HBFaction = torch.cat((act_txbf, act_rxbf), axis=1)
 
         return HBFaction
 
     
-    def train(self, observations, actions, rewards, next_state, not_done, logger=None):
+    def train(self, replay_buffer, batch_size, logger=None):
         self.total_it += 1
+        
+        # Sample replay buffer
+        observations, actions, next_state, rewards, not_done = replay_buffer.sample(batch_size)
         
         # Update
         self.update_v(observations, actions, logger)
-        HBFact = self.update_actor(observations, actions, logger)
+        self.update_actor(observations, actions, logger)
         self.update_q(observations, actions, rewards, next_state, not_done, logger)
         self.update_target()
 
-        return HBFact
-
-    
+ 
     def save(self, model_dir):
         torch.save(self.critic.state_dict(), os.path.join(model_dir, f"critic_s{str(self.total_it)}.pth"))
         torch.save(self.critic_target.state_dict(), os.path.join(model_dir, f"critic_target_s{str(self.total_it)}.pth"))
