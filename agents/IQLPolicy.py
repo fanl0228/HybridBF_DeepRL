@@ -143,13 +143,7 @@ class IQLpolicy(object):
     
     def select_action(self, state):
         #state = torch.FloatTensor(state.reshape(1, -1)).to(device)
-        #pdb.set_trace()
-
         act_txbf, act_rxbf  = self.actor.get_action(state)#.cpu().data.numpy()#.flatten() 
-        
-        #act_txbf = self.softmax_txbf(act_txbf)
-        #act_rxbf = self.softmax_rxbf(act_rxbf)
-
         act_txbf = act_txbf.unsqueeze(1)
         act_rxbf = act_rxbf.unsqueeze(1)
         HBFaction = torch.cat((act_txbf, act_rxbf), axis=1)
@@ -157,7 +151,7 @@ class IQLpolicy(object):
         return HBFaction
 
     
-    def train(self, observations, actions, rewards, next_state, not_done, batch_size=1, logger=None):
+    def train(self, observations, actions, rewards, next_state, not_done, logger=None):
         self.total_it += 1
         
         # Update

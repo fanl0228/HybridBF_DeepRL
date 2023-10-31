@@ -23,7 +23,7 @@ class Actor(nn.Module):
         self.nDoppler = state_shape[1]
         self.txbf_output_dim = action_shape[1]
         self.rxbf_output_dim = action_shape[2]
-
+        
         self.backbone = BackboneRL(model_depth=50, nDoppler=self.nDoppler, output_dim=2048)
 
         self.fc_txbf = nn.Linear(2048, self.txbf_output_dim)
@@ -32,11 +32,8 @@ class Actor(nn.Module):
         self.softmax_txbf = torch.nn.Softmax(dim=1)
         self.softmax_rxbf = torch.nn.Softmax(dim=1)
         
-        # self.argmax_txbf = torch.argmax(act_txbf, dim=0)
-        # self.argmax_rxbf = torch.argmax(act_txbf, dim=0)
-
-    def forward(self, states):
-        x = self.backbone(states)
+    def forward(self, state):
+        x = self.backbone(state)
         
         x_txbf = self.fc_txbf(x)
         x_rxbf = self.fc_rxbf(x)
@@ -46,13 +43,11 @@ class Actor(nn.Module):
 
         return x_txbf, x_rxbf
 
-    def get_action(self, states):
-        x_txbf, x_rxbf = self.forward(states)
+    def get_action(self, state):
+        x_txbf, x_rxbf = self.forward(state)
 
         act_txbf = self.softmax_txbf(x_txbf)
         act_rxbf = self.softmax_rxbf(x_rxbf)
-        
-        # HBFact = torch.cat((act_txbf, act_rxbf), axis=0)
         
         return act_txbf, act_rxbf
         
