@@ -23,7 +23,7 @@ class ValueCritic(nn.Module):
         self.l3 = nn.Linear(256, 1)
 
     def forward(self, state):
-        state = self.batchNorm3D_state(state) # BatchNorm
+        #state = self.batchNorm3D_state(state) # BatchNorm
         
         feature = self.backbone(state) 
 
@@ -49,7 +49,7 @@ class ActionCritic(nn.Module):
 
         self.backbone_state = BackboneRL(model_depth=50, nDoppler=self.nDoppler, output_dim=2048)  # output [1, 2048]
 
-        self.backbone_action = MLP(2*self.rxbf_output_dim, out_dim=512, hidden_dim=1024, n_layers=3)
+        self.backbone_action = MLP(2*self.rxbf_output_dim, out_dim=512, hidden_dim=1024, n_layers=5)
         
         
         # Q1 architecture

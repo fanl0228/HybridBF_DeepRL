@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 import numpy as np
 import torch
@@ -32,15 +32,15 @@ def get_parsers():
     parser = argparse.ArgumentParser()
     # Experiment
     parser.add_argument("--policy", default="IQLpolicy")                  # Policy name
-    parser.add_argument("--train_dataset", default="/data/mmWaveRL_Datasets/train1")
-    parser.add_argument("--test_dataset", default="/data/mmWaveRL_Datasets/test1")                    # dataset path
+    parser.add_argument("--train_dataset", default="/data/mmWaveRL_Datasets/train")
+    parser.add_argument("--test_dataset", default="/data/mmWaveRL_Datasets/test")                    # dataset path
     parser.add_argument("--seed", default=3, type=int)              #  
-    parser.add_argument("--train_max_steps", default=1e4, type=int)   # Max time steps to run environment
+    parser.add_argument("--train_max_steps", default=1000, type=int)   # Max time steps to run environment
     parser.add_argument("--train_episodes", default=100, type=int)
     parser.add_argument("--save_model", default=True, action="store_true")        # Save model and optimizer parameters
     parser.add_argument("--eval_freq", default=1, type=int)       # How often (time steps) we evaluate
-    parser.add_argument('--eval_max_steps', default=1000, type=int)
-    parser.add_argument('--eval_episodes', default=10, type=int)
+    parser.add_argument('--eval_max_steps', default=500, type=int)
+    parser.add_argument('--eval_episodes', default=1, type=int)
     parser.add_argument('--save_video', default=False, action='store_true')
     parser.add_argument("--normalize", default=True, action='store_true')
     parser.add_argument("--debug", default=False, action='store_true')
@@ -101,9 +101,6 @@ def train(args):
         "expectile": args.expectile,
     }
 
-    # hybridBFAction_buffer = np.rand(args.batch_size, 2, tx_rx_spacae_dim).cuda()
-    # observationsRDA_buffer = torch.rand(args.batch_size, 128, 10, 64, 16).cuda()
-
     hybridBFAction = np.random.randn(2, tx_rx_spacae_dim)
     observationsRDA = np.random.randn(128, 10, 64, 16)
     next_observationsRDA = np.random.randn(128, 10, 64, 16)
@@ -131,14 +128,14 @@ def train(args):
     test_dataset = OfflineDataset(args.test_dataset)
     test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=True)
     
-    train_data_filenumbers = len(os.listdir(args.train_dataset))
+    train_filenumbers = len(os.listdir(args.train_dataset))
 
     for t in trange(int(args.train_episodes), desc="Train Epoch"):
         
         sample_num = 0
         for data_dict_batch in tqdm(train_dataloader, desc="Loading train datafile"):
 
-            for epoch in trange(int(args.train_max_steps), desc="Train Epoch"):
+            for epoch in range(int(args.train_max_steps)):
 
                 ''' Data preprocessing and to tensor
                 '''
@@ -160,7 +157,7 @@ def train(args):
                 next_observationsRDA_std = next_observationsRDA.std() + 1e-3
                 next_observationsRDA = (next_observationsRDA - next_observationsRDA_mean)/next_observationsRDA_std
 
-                rewards = data_dict_batch['rewards_Phase'][0, txbf_idxs].numpy()
+                rewards = data_dict_batch['rewards_PSINR'][0, txbf_idxs].numpy()
                 isDone= data_dict_batch['terminals'][0, txbf_idxs].numpy()
                 
                 # [batch, frame, range, Doppler, ant] --> [batch, Doppler, frame, range, ant]
@@ -177,21 +174,23 @@ def train(args):
                     # train model
                     policy.train(replay_buffer, args.batch_size, logger=logger)
 
-                # logger
-                logger.log('train/txbf_idxs[0]', txbf_idxs, int(args.train_max_steps)*sample_num+(train_data_filenumbers*t)+epoch)
-                logger.log('train/rxbf_idxs[0]', rxbf_idxs, int(args.train_max_steps)*sample_num+(train_data_filenumbers*t)+epoch)
-                
-                
-                if 1:
-                    train_num = int(args.train_max_steps)*sample_num+(train_data_filenumbers*t) + epoch 
-                    print("---->sample iter:{}, next_observationsRDA size:{}, txbf_idx: {}".format(train_num, next_observationsRDA.shape, txbf_idxs))
-        
-            # Evaluation episode
-            # train_num = int(args.train_max_steps)*t+(train_data_filenumbers * sample_num) + epoch 
-            # eval_score = eval_policy(args, train_num+1, logger, policy, test_dataloader, args.eval_episodes)
-            # print("------------------Evaluation over t: {} episodes: {}".format(train_num, eval_score))
+            train_num = t*train_filenumbers + sample_num 
+            #print("---->sample iter:{}, next_observationsRDA size:{}, txbf_idx: {}".format(train_num, next_observationsRDA.shape, txbf_idxs))
+            
+            # logger
+            logger.log('train/txbf_idxs[0]', txbf_idxs, train_num)
+            logger.log('train/rxbf_idxs[0]', rxbf_idxs, train_num)
+            
+            # # Evaluation number
+            # eval_num = t*train_filenumbers + sample_num
+            # eval_score = eval_policy(args, eval_num+1, logger, policy, test_dataloader, args.eval_episodes)
+            # print("------------------Evaluation number: {} eval_score: {}".format(eval_num, eval_score))       
             
             sample_num += 1
+        # Evaluation number
+
+        eval_score = eval_policy(args, t+1, logger, policy, test_dataloader, args.eval_episodes)
+        print("------------------Evaluation number: {} eval_score: {}".format(t, eval_score))
             
     if args.save_model:
         policy.save(args.model_dir)

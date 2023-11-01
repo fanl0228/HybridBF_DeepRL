@@ -35,19 +35,19 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, eval_episod
     lengths_eval = []
     final_reward_eval = []  # eval_score = []
     avg_reward_eval = []
-
+    
+    test_filenumbers = len(os.listdir(args.test_dataset))
+    
+    batch_num = 0
     for data_dict_batch in tqdm(test_dataloader, desc="Loading test datafile"):
-        
-        batch_num = 0
-        
+          
         lengths_batch = []
         final_reward_batch = [] 
         avg_reward_batch = []
         final_txbfs_batch = []
         final_rxbfs_batch = []
-
-        for epiod_ in trange(int(eval_episodes), desc="Test Epoch"):
     
+        for epiod_ in range(int(eval_episodes)):  
             steps = 0
             avg_reward_sample = 0.
             final_reward_sample = 0.
@@ -82,13 +82,14 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, eval_episod
                                             ))
 
                 for b in range(data_dict_batch['observationsRDA'].size(0)):
-                    next_observationsRDA[b,...] = data_dict_batch['observationsRDA'][b, txbf_idxs[b], ...] # observationsRDA: [frame, range, Doppler, ant] = [b, 10, 64, 128, 16]
+                    #next_observationsRDA[b,...] = data_dict_batch['observationsRDA'][b, txbf_idxs[b], ...] # observationsRDA: [frame, range, Doppler, ant] = [b, 10, 64, 128, 16]
                     
                     # 2. action RXBF, rx antenna is 16
                     mmWave_WX = torch.sin(torch.tensor(rxbf_idxs[b]*math.pi/180))
                     mmWave_RXBF_V = torch.exp(-1j*2*math.pi*mmWave_f0*mmWave_d*mmWave_D_BF*mmWave_WX)
-                    next_observationsRDA[b,...] = next_observationsRDA[b,...] * mmWave_RXBF_V
-                    next_observationsRDA[b,...] = 10*torch.log10(abs(next_observationsRDA[b,...]) + 1e-8) # abs - 10*log10           
+                    
+                    #next_observationsRDA[b,...] = data_dict_batch['observationsRDA'][b, txbf_idxs[b], ...] * mmWave_RXBF_V
+                    next_observationsRDA[b,...] = 10*torch.log10(abs(data_dict_batch['observationsRDA'][b, txbf_idxs[b], ...] * mmWave_RXBF_V) + 1e-8) # abs - 10*log10           
                     
                     # 3. Normalize
                     next_observationsRDA_mean = next_observationsRDA[b,...].mean()
@@ -134,8 +135,10 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, eval_episod
                                                                         avg_reward_batch, final_reward_batch, 
                                                                         final_txbf_idxs, final_rxbf_idxs))
         
-        logger.log('eval/final_txbf', np.mean(final_txbfs_batch), int(iter*eval_episodes) + epiod_)
-        logger.log('eval/final_rxbf', np.mean(final_txbfs_batch), int(iter*eval_episodes) + epiod_)
+        #print(" num:{}".format(int(iter * test_filenumbers) + batch_num))
+        # pdb.set_trace()
+        logger.log('eval/final_txbf', np.mean(final_txbfs_batch), int(iter * test_filenumbers) + batch_num)
+        logger.log('eval/final_rxbf', np.mean(final_rxbfs_batch), int(iter * test_filenumbers) + batch_num)
 
         #pdb.set_trace()
         final_reward_eval.append(np.mean(final_reward_batch))
@@ -156,5 +159,5 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, eval_episod
 
     final_reward_eval = np.mean(final_reward_eval)
 
-    print("------------> Evaluation over t: {}, avg_reward_eval:{}, final_reward_eval: {}".format(eval_episodes, np.mean(avg_reward_eval), final_reward_eval))
+    print("------------> Evaluation over iter: {}, avg_reward_eval:{}, final_reward_eval: {}".format(iter, np.mean(avg_reward_eval), final_reward_eval))
     return final_reward_eval

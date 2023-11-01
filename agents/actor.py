@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.distributions
 
+from agents.MLP_model import MLP
 from agents.backboneRL import BackboneRL
 
 
@@ -25,18 +26,26 @@ class Actor(nn.Module):
         self.rxbf_output_dim = action_shape[2]
         
         self.backbone = BackboneRL(model_depth=50, nDoppler=self.nDoppler, output_dim=2048)
+        
+        self.backbone_action_txbf = MLP(2048, out_dim=512, hidden_dim=1024, n_layers=3)
 
-        self.fc_txbf = nn.Linear(2048, self.txbf_output_dim)
-        self.fc_rxbf = nn.Linear(2048, self.rxbf_output_dim)
+        self.backbone_action_rxbf = MLP(2048, out_dim=512, hidden_dim=1024, n_layers=3)
+        
+        self.fc_txbf = nn.Linear(512, self.txbf_output_dim)
+
+        self.fc_rxbf = nn.Linear(512, self.rxbf_output_dim)
 
         self.softmax_txbf = torch.nn.Softmax(dim=1)
         self.softmax_rxbf = torch.nn.Softmax(dim=1)
         
     def forward(self, state):
         x = self.backbone(state)
+
+        x_txbf = self.backbone_action_txbf(x)
+        x_txbf = self.fc_txbf(x_txbf)
         
-        x_txbf = self.fc_txbf(x)
-        x_rxbf = self.fc_rxbf(x)
+        x_rxbf = self.backbone_action_rxbf(x)
+        x_rxbf = self.fc_rxbf(x_rxbf)
         
         x_txbf = torch.tanh(x_txbf)
         x_rxbf = torch.tanh(x_rxbf)
