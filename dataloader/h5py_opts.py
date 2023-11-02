@@ -1,6 +1,8 @@
 import os.path
 
+
 import h5py
+from mpi4py import MPI
 from tqdm import tqdm
 import numpy as np
 
@@ -9,6 +11,9 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 import pdb
+
+
+MPIcomm = MPI.COMM_WORLD
 
 # /home/hx/fanl/HybridBF_DeepRL/mmWaveRL/datasets/BeamAngle001_Sample00_State_RAObj.mat , "State_RAObj"
 def get_file_data(filename, mat_name):
@@ -181,6 +186,23 @@ def read_h5py_file(h5path):
                 data_dict[k] = dataset_file[k][:]
             except ValueError as e:  # try loading as a scalar
                 data_dict[k] = dataset_file[k][()]
+
+    return data_dict
+
+
+def read_h5py_file_parallel(h5path):
+    data_dict = {}
+    with h5py.File(h5path, 'r', driver='mpio', comm=MPIcomm) as dataset_file:
+        data_dict['rewards_PSINR'] = dataset_file['rewards_PSINR'][:] 
+        data_dict['terminals'] = dataset_file['terminals'][:]
+        
+        
+        dataset_size = data_dict['observationsRDA'].shape[0]
+        start = MPIcomm.rank * (dataset_size // MPIcomm.size)
+        end = (MPIcomm.rank + 1) * (dataset_size // MPIcomm.size)
+
+        local_data = np.empty(end - start, dtype=np.complex64)
+        dataset_file['observationsRDA'][start:end].read_direct(local_data)
 
     return data_dict
 

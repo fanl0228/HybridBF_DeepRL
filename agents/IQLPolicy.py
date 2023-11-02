@@ -18,6 +18,11 @@ from utils.log import Logger
 import pdb
 
 
+def loss(diff, expectile=0.8):
+        weight = torch.where(diff > 0, expectile, (1 - expectile))
+        return weight * (diff**2)
+
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class IQLpolicy(object):
@@ -62,11 +67,6 @@ class IQLpolicy(object):
     def get_model(self):
         return self.actor, self.critic, self.value
 
-
-    def loss(self, diff, expectile=0.8):
-        weight = torch.where(diff > 0, expectile, (1 - expectile))
-        return weight * (diff**2)
-
     
     def update_v(self, states, actions, logger=None):
 
@@ -77,7 +77,7 @@ class IQLpolicy(object):
         # use Advantage Function update
         v = self.value(states)
         
-        value_loss = self.loss(q - v, expectile=self.expectile).mean()
+        value_loss = loss(q - v, expectile=self.expectile).mean()
         
         self.value_optimizer.zero_grad()
         value_loss.backward()

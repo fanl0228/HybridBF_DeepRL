@@ -11,7 +11,7 @@ from mpl_toolkits.mplot3d import Axes3D
 # User custom
 import sys
 sys.path.append("../")
-from dataloader.h5py_opts import read_h5py_file, write_h5py_file
+from dataloader.h5py_opts import read_h5py_file, write_h5py_file, read_h5py_file_parallel
 
 
 import pdb
@@ -42,15 +42,16 @@ if __name__ == "__main__":
         
         print("Processing file...:{}".format(src_file_paths))
         # read test dataset
-        data_dict = read_h5py_file(src_file_paths)
+        # data_dict = read_h5py_file(src_file_paths)
+        data_dict = read_h5py_file_parallel(src_file_paths)
         
-        plt.figure()
-        plt.plot(data_dict['rewards_PSINR'], color='r', label="PSINR")
-        #plt.plot(data_dict['rewards_Intensity'], color='g', label="Intensity")
-        plt.plot(data_dict['rewards_Phase'], color='b', label="Phase")
-        plt.legend()
-        #plt.pause(0.01)
-        plt.savefig(res_file_paths.split('.')[0] + '_reward_log10.png')
+        # plt.figure()
+        # plt.plot(data_dict['rewards_PSINR'], color='r', label="PSINR")
+        # #plt.plot(data_dict['rewards_Intensity'], color='g', label="Intensity")
+        # plt.plot(data_dict['rewards_Phase'], color='b', label="Phase")
+        # plt.legend()
+        # #plt.pause(0.01)
+        # plt.savefig(res_file_paths.split('.')[0] + '_reward_log10.png')
 
 
 

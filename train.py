@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 import numpy as np
 import torch
@@ -35,7 +35,7 @@ def get_parsers():
     parser.add_argument("--train_dataset", default="/data/mmWaveRL_Datasets/train")
     parser.add_argument("--test_dataset", default="/data/mmWaveRL_Datasets/test")                    # dataset path
     parser.add_argument("--seed", default=3, type=int)              #  
-    parser.add_argument("--train_max_steps", default=3200, type=int)   # Max time steps to run environment
+    parser.add_argument("--train_max_steps", default=1000, type=int)   # Max time steps to run environment
     parser.add_argument("--train_episodes", default=100, type=int)
     parser.add_argument("--save_model", default=True, action="store_true")        # Save model and optimizer parameters
     parser.add_argument("--eval_freq", default=1, type=int)       # How often (time steps) we evaluate
@@ -45,32 +45,30 @@ def get_parsers():
     parser.add_argument("--normalize", default=True, action='store_true')
     parser.add_argument("--debug", default=False, action='store_true')
     # IQL
-    parser.add_argument("--batch_size", default=16, type=int)      # Batch size default is 1
+    parser.add_argument("--batch_size", default=8, type=int)      # Batch size default is 1
     parser.add_argument("--temperature", default=3.0, type=float)
     parser.add_argument("--expectile", default=0.7, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
     parser.add_argument("--discount", default=0.99, type=float)     # Discount factor
     # Work dir
-    parser.add_argument('--work_dir', default='tmp_debug', type=str)
-    parser.add_argument('--model_dir', default='runs/savemodel_debug', type=str)
+    parser.add_argument('--work_dir', default='tmp', type=str)
     args = parser.parse_args()
 
     # Build work dir
-    base_dir = 'runs'
+    base_dir = 'runs_v1'
     make_dir(base_dir)
     base_dir = os.path.join(base_dir, args.work_dir)
     make_dir(base_dir)
-    args.work_dir = os.path.join(base_dir, 'dataset')
+    args.work_dir = os.path.join(base_dir, 'training')
     make_dir(args.work_dir)
+    args.model_dir = os.path.join(base_dir, 'savemodel')
     make_dir(args.model_dir)
 
     with open(os.path.join(args.work_dir, 'args.json'), 'w') as f:
         json.dump(vars(args), f, sort_keys=True, indent=4)
 
-    snapshot_src('.', os.path.join(args.work_dir, 'src'), '.gitignore')
+    #snapshot_src('.', os.path.join(args.work_dir, 'src'), '.gitignore')
     
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     print("==========================================================")
     print(" Device: {}".format(device))
     print(" Args: {}".format(args))
@@ -88,7 +86,7 @@ def train(args):
     mmWave_doppler_dim = 128
     mmWave_frame_dim = 10
     mmWave_range_dim = 64
-    mmWave_angle_dim = 128
+    mmWave_angle_dim = 16
     tx_rx_spacae_dim = 121   # txbf and rxbf search space [0:121] --> angle [-60, +60]
 
     state_shape = [args.batch_size, mmWave_doppler_dim, mmWave_frame_dim, mmWave_range_dim, mmWave_angle_dim] #  [batch, Doppler, frame, range, ant]
@@ -179,16 +177,12 @@ def train(args):
                     # train model
                     policy.train(replay_buffer, args.batch_size, logger=logger)
 
-                    train_num = t*train_filenumbers*args.train_max_steps + sample_num*args.train_max_steps + epoch
-                    # logger
-                    logger.log('train/txbf_idxs[0]', txbf_idxs, train_num)
-                    logger.log('train/rxbf_idxs[0]', rxbf_idxs, train_num)
-            
-            # # Evaluation number
-            # eval_num = t*train_filenumbers + sample_num
-            # eval_score = eval_policy(args, eval_num+1, logger, policy, test_dataloader, args.eval_episodes)
-            # print("------------------Evaluation number: {} eval_score: {}".format(eval_num, eval_score))       
-            
+                # train_num = t*train_filenumbers*args.train_max_steps + sample_num*args.train_max_steps + (epoch+1) / args.batch_size      
+                # print("===================train number:{}".format(train_num))
+                # # logger
+                # logger.log('train/txbf_idxs[0]', txbf_idxs, train_num)
+                # logger.log('train/rxbf_idxs[0]', rxbf_idxs, train_num)
+                        
             sample_num += 1
 
         # Evaluation number
