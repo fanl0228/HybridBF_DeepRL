@@ -189,22 +189,22 @@ def read_h5py_file(h5path):
 
     return data_dict
 
-
-def read_h5py_file_parallel(h5path):
-    data_dict = {}
-    with h5py.File(h5path, 'r', driver='mpio', comm=MPIcomm) as dataset_file:
-        data_dict['rewards_PSINR'] = dataset_file['rewards_PSINR'][:] 
-        data_dict['terminals'] = dataset_file['terminals'][:]
+# [failed]
+# def read_h5py_file_parallel(h5path):
+#     data_dict = {}
+#     with h5py.File(h5path, 'r', driver='mpio', comm=MPIcomm) as dataset_file:
+#         data_dict['rewards_PSINR'] = dataset_file['rewards_PSINR'][:] 
+#         data_dict['terminals'] = dataset_file['terminals'][:]
         
         
-        dataset_size = data_dict['observationsRDA'].shape[0]
-        start = MPIcomm.rank * (dataset_size // MPIcomm.size)
-        end = (MPIcomm.rank + 1) * (dataset_size // MPIcomm.size)
+#         dataset_size = data_dict['observationsRDA'].shape[0]
+#         start = MPIcomm.rank * (dataset_size // MPIcomm.size)
+#         end = (MPIcomm.rank + 1) * (dataset_size // MPIcomm.size)
 
-        local_data = np.empty(end - start, dtype=np.complex64)
-        dataset_file['observationsRDA'][start:end].read_direct(local_data)
+#         local_data = np.empty(end - start, dtype=np.complex64)
+#         dataset_file['observationsRDA'][start:end].read_direct(local_data)
 
-    return data_dict
+#     return data_dict
 
 
 if __name__ == "__main__":

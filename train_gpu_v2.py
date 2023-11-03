@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import numpy as np
 import torch
@@ -51,8 +51,8 @@ def get_parsers():
     parser.add_argument("--tau", default=0.005, type=float)
     parser.add_argument("--discount", default=0.99, type=float)     # Discount factor
     # Work dir
-    parser.add_argument('--work_dir', default='tmp_v1', type=str)
-    parser.add_argument('--model_dir', default='runs_gpu/tmp_v1/savemodel', type=str)
+    parser.add_argument('--work_dir', default='tmp_v2', type=str)
+    parser.add_argument('--model_dir', default='runs_gpu/tmp_v2/savemodel', type=str)
     args = parser.parse_args()
 
     # Build work dir
@@ -86,7 +86,7 @@ def train(args):
     mmWave_doppler_dim = 128
     mmWave_frame_dim = 3
     mmWave_range_dim = 64
-    mmWave_angle_dim = 16
+    mmWave_angle_dim = 64
     tx_rx_spacae_dim = 121   # txbf and rxbf search space [0:121] --> angle [-60, +60]
 
     state_shape = [args.batch_size, mmWave_doppler_dim, mmWave_frame_dim, mmWave_range_dim, mmWave_angle_dim] 
@@ -132,6 +132,8 @@ def train(args):
     
     train_filenumbers = len(os.listdir(args.train_dataset))
     
+
+    cnt = 0
     for t in trange(int(args.train_episodes), desc="Train Episodes"):
         
         sample_num = 0
@@ -153,6 +155,7 @@ def train(args):
                 # 1. observationsRDA: [frame, range, Doppler, ant]
                 rewards = data_dict_batch['rewards_PSINR'][0, txbf_idxs.item()]
                 isDone= data_dict_batch['terminals'][0, txbf_idxs.item()]
+                
                 next_observationsRDA_buffer = torch.clone(data_dict_batch['observationsRDA'][0, txbf_idxs.item(), :mmWave_frame_dim,...]).to(device, non_blocking=True) 
                 
                 # 2. action RXBF, rx antenna is 16
@@ -174,20 +177,35 @@ def train(args):
                 
                 # add to replaybuffer
                 replay_buffer.add(observationsRDA, hybridBFAction, next_observationsRDA, rewards, isDone)
+                
                 observationsRDA_buffer = torch.clone(next_observationsRDA).to(device, non_blocking=True)
                 
+                if (cnt+1) % 64 == 0:
+
+                    for _ in range(4):
+                        # train model
+                        policy.train(replay_buffer, args.batch_size, logger=logger)
+                        # print("========train_num:{}, txbf:{}, rxbf:{}".format(train_num, txbf_idxs.item(), rxbf_idxs.item()))
+                        
+                        #
+                        logger.log_image("train/state_RD", next_observationsRDA[:,0,:,0].unsqueeze(0), cnt)
+                        logger.log_image("train/state_RA",  torch.mean(next_observationsRDA[:,0,:,:],dim=0).unsqueeze(0), cnt)
+                
+                
+                # break
+                if (isDone.mean().cpu().item() != 0):
+                    break
+
                 # get action
                 hybridBFAction_buffer = policy.select_action(next_observationsRDA.unsqueeze(0).to(device, non_blocking=True))
             
                 # logger
-                train_num = t*train_filenumbers*args.train_max_steps + sample_num*args.train_max_steps + step
-                logger.log('train/txbf_idxs', txbf_idxs.item(), train_num)
-                logger.log('train/rxbf_idxs', rxbf_idxs.item(), train_num)
+                #train_num = t*train_filenumbers*args.train_max_steps + sample_num*args.train_max_steps + step
+                logger.log('train/txbf_idxs', txbf_idxs.item(), cnt)
+                logger.log('train/rxbf_idxs', rxbf_idxs.item(), cnt)
                 
-                if (step+1) % args.batch_size == 0:
-                    # train model
-                    policy.train(replay_buffer, args.batch_size, logger=logger)
-                    # print("========train_num:{}, txbf:{}, rxbf:{}".format(train_num, txbf_idxs.item(), rxbf_idxs.item())) 
+                cnt +=1
+
             sample_num += 1
 
         # Evaluation number

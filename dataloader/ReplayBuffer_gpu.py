@@ -5,7 +5,7 @@ from torch.autograd import Variable as V
 import pdb
 
 class ReplayBuffer_gpu(object):
-    def __init__(self, state_dim, action_dim, max_size=int(121)):
+    def __init__(self, state_dim, action_dim, max_size=int(128)):
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

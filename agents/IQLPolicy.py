@@ -76,7 +76,6 @@ class IQLpolicy(object):
         
         # use Advantage Function update
         v = self.value(states)
-        
         value_loss = loss(q - v, expectile=self.expectile).mean()
         
         self.value_optimizer.zero_grad()
@@ -87,7 +86,7 @@ class IQLpolicy(object):
         logger.log('train/v', v.mean(), self.total_it)
     
     
-    def update_q(self, states, actions, rewards, next_states, not_dones, logger=None):
+    def update_q(self, states, actions, rewards, next_states, not_dones, logger=None):  
         with torch.no_grad():
             next_v = self.value(next_states)
             # Compute the target Q value
@@ -106,6 +105,7 @@ class IQLpolicy(object):
         logger.log('train/critic_loss', critic_loss, self.total_it)
         logger.log('train/q1', q1.mean(), self.total_it)
         logger.log('train/q2', q2.mean(), self.total_it)
+        logger.log('train/target_q', target_q.mean(), self.total_it)
     
     
     def update_target(self):
