@@ -2,7 +2,7 @@ import os.path
 
 
 import h5py
-from mpi4py import MPI
+
 from tqdm import tqdm
 import numpy as np
 
@@ -13,7 +13,6 @@ from mpl_toolkits.mplot3d import Axes3D
 import pdb
 
 
-MPIcomm = MPI.COMM_WORLD
 
 # /home/hx/fanl/HybridBF_DeepRL/mmWaveRL/datasets/BeamAngle001_Sample00_State_RAObj.mat , "State_RAObj"
 def get_file_data(filename, mat_name):
@@ -182,6 +181,17 @@ def read_h5py_file(h5path):
     data_dict = {}
     with h5py.File(h5path, 'r') as dataset_file:
         for k in get_keys(dataset_file):
+            try:  # first try loading as an array
+                data_dict[k] = dataset_file[k][:]
+            except ValueError as e:  # try loading as a scalar
+                data_dict[k] = dataset_file[k][()]
+
+    return data_dict
+
+def read_h5py_file_tqdm(h5path):
+    data_dict = {}
+    with h5py.File(h5path, 'r') as dataset_file:
+        for k in tqdm(get_keys(dataset_file), desc="load datafile"):
             try:  # first try loading as an array
                 data_dict[k] = dataset_file[k][:]
             except ValueError as e:  # try loading as a scalar

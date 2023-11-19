@@ -30,6 +30,8 @@ class Actor(nn.Module):
         self.backbone_action_txbf = MLP(2048, out_dim=512, hidden_dim=1024, n_layers=3)
 
         self.backbone_action_rxbf = MLP(2048, out_dim=512, hidden_dim=1024, n_layers=3)
+
+        self.backbone_action = MLP(2048, out_dim=512, hidden_dim=1024, n_layers=3)
         
         self.fc_txbf = nn.Linear(512, self.txbf_output_dim)
 
@@ -41,12 +43,17 @@ class Actor(nn.Module):
     def forward(self, state):
         x = self.backbone(state)
 
-        x_txbf = self.backbone_action_txbf(x)
-        x_txbf = self.fc_txbf(x_txbf)
+        x = self.backbone_action(x)
+
+        # x_txbf = self.backbone_action_txbf(x)
+        # x_txbf = self.fc_txbf(x_txbf)
         
-        x_rxbf = self.backbone_action_rxbf(x)
-        x_rxbf = self.fc_rxbf(x_rxbf)
-        
+        # x_rxbf = self.backbone_action_rxbf(x)
+        # x_rxbf = self.fc_rxbf(x_rxbf)
+
+        x_txbf = self.fc_txbf(x)
+        x_rxbf = self.fc_rxbf(x)
+
         x_txbf = torch.tanh(x_txbf)
         x_rxbf = torch.tanh(x_rxbf)
 
@@ -55,8 +62,15 @@ class Actor(nn.Module):
     def get_action(self, state):
         x_txbf, x_rxbf = self.forward(state)
 
-        act_txbf = self.softmax_txbf(x_txbf)
-        act_rxbf = self.softmax_rxbf(x_rxbf)
+
+        # print('txbf: ', x_txbf)
+        # print('rxbf: ', x_rxbf)
+
+        # act_txbf = self.softmax_txbf(x_txbf)
+        # act_rxbf = self.softmax_rxbf(x_rxbf)
+
+        act_txbf = x_txbf
+        act_rxbf = x_rxbf
         
         return act_txbf, act_rxbf
         

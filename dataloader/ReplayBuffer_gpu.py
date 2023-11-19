@@ -31,18 +31,21 @@ class ReplayBuffer_gpu(object):
         
 
     def add(self, state, action, next_state, reward, done):
+        
+        
 
-        self.state[self.ptr] = state
-        self.action[self.ptr] = action
-        self.next_state[self.ptr] = next_state
-        self.reward[self.ptr] = reward
-        self.not_done[self.ptr] = 1. - done
+        self.state_buf[self.ptr] = state
+        self.action_buf[self.ptr] = action
+        self.next_state_buf[self.ptr] = next_state
+        self.reward_buf[self.ptr] = reward
+        self.not_done_buf[self.ptr] = 1. - done
 
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
 
     def sample(self, batch_size):
-
+        
+        # pdb.set_trace()
         ind = np.random.randint(0, self.size, size=batch_size)
 
         return (

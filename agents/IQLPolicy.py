@@ -122,7 +122,7 @@ class IQLpolicy(object):
             exp_a = torch.exp((q - v) * self.temperature)
             exp_a = torch.clamp(exp_a, max=100.0).squeeze(-1).detach()
 
-        act_txbf, act_rxbf = self.actor(states)
+        act_txbf, act_rxbf = self.actor.get_action(states)
         
         act_txbf = act_txbf.unsqueeze(1)
         act_rxbf = act_rxbf.unsqueeze(1)
@@ -146,7 +146,11 @@ class IQLpolicy(object):
         act_txbf, act_rxbf  = self.actor.get_action(state)#.cpu().data.numpy()#.flatten() 
         act_txbf = act_txbf.unsqueeze(1)
         act_rxbf = act_rxbf.unsqueeze(1)
-        
+
+        # print('#####before')
+        # print(act_txbf)
+        # print(act_rxbf)
+
         HBFaction = torch.cat((act_txbf, act_rxbf), axis=1)
 
         return HBFaction

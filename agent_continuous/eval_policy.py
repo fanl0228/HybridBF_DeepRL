@@ -23,8 +23,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # A fixed seed is used for the eval environment
 
 # def eval_policy(args, iter, video: VideoRecorder, logger: Logger, policy, env_name, seed, mean, std, seed_offset=100, eval_episodes=10):
-def eval_policy(args, iter, logger: Logger, policy, test_dataloader, mmWave_doppler_dim=128, mmWave_frame_dim=3,
-                mmWave_range_dim=64, mmWave_angle_dim=16):
+def eval_policy(args, iter, count, logger: Logger, policy, test_dataloader, mmWave_doppler_dim=128, mmWave_frame_dim=3,
+                mmWave_range_dim=64, mmWave_angle_dim=16, ):
     # Rxbf paramer
     mmWave_f0 = torch.tensor(7.7e10).to(device, non_blocking=True)
     mmWave_d = torch.tensor(0.5034).to(device, non_blocking=True)
@@ -62,6 +62,7 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, mmWave_dopp
         avg_reward_batch = []
         final_txbfs_batch = []
         final_rxbfs_batch = []
+        step_batch = []
 
         sample_num = 0
         sample = 0
@@ -91,18 +92,23 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, mmWave_dopp
             imag_part = torch.sin(-2 * torch.pi * mmWave_f0 * mmWave_d * mmWave_D_BF * mmWave_WX).to(device,
                                                                                                      non_blocking=True)
             mmWave_RXBF_V = torch.exp(1j * (real_part + imag_part)).to('cuda')
-            observationsRDA_buffer = observationsRDA_buffer * mmWave_RXBF_V
-            observationsRDA_buffer = torch.fft.fft(observationsRDA_buffer, mmWave_angle_dim, axis=-1).to(
-                device, non_blocking=True)
+
+            # observationsRDA_buffer = observationsRDA_buffer * mmWave_RXBF_V
+            # observationsRDA_buffer = torch.fft.fft(observationsRDA_buffer, mmWave_angle_dim, axis=-1).to(
+            #     device, non_blocking=True)
+
+            observationsRDA_buffer = torch.matmul(observationsRDA_buffer, mmWave_RXBF_V).unsqueeze(-1)
 
             observationsRDA_buffer = 10 * torch.log10(torch.abs(observationsRDA_buffer) + 1e-8).to(device,
                                                                                                    non_blocking=True)
 
             observationsRDA_buffer = (observationsRDA_buffer -
-                observationsRDA_buffer.min()) / (observationsRDA_buffer.max()-observationsRDA_buffer.min() + 1e-3)
+                                      observationsRDA_buffer.min()) / (
+                                                 observationsRDA_buffer.max() - observationsRDA_buffer.min() + 1e-3)
 
-            observationsRDA_buffer = observationsRDA_buffer.permute(2, 0, 1,
-                                                                    3)  # [F,R,D,A]] --> [D,F,R,A]
+            # observationsRDA_buffer = observationsRDA_buffer.permute(1, 2, 0,
+            #                                                         3)  # [F,R,D,A]] --> [D,F,R,A]
+            observationsRDA_buffer = torch.squeeze(observationsRDA_buffer)
 
             txbf_list = []
             rxbf_list = []
@@ -122,22 +128,28 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, mmWave_dopp
 
                 # print(observationsRDA)
                 # get action
-                hybridBFAction_buffer = policy.select_action(observationsRDA.unsqueeze(0).to(device, non_blocking=True))
-                hybridBFAction = V(hybridBFAction_buffer)
+                action = policy.get_action(observationsRDA.unsqueeze(0).to(device, non_blocking=True))
+                # hybridBFAction = V(hybridBFAction_buffer)
 
                 # get txbf, rxbf value
-                txbf_idxs = torch.argmax(hybridBFAction[0, 0, :], -1)
-                rxbf_idxs = torch.argmax(hybridBFAction[0, 1, :], -1)
+                # txbf_idxs = torch.argmax(hybridBFAction[0, 0, :], -1)
+                # rxbf_idxs = torch.argmax(hybridBFAction[0, 1, :], -1)
 
-                txbf_list.append(txbf_idxs.item())
-                rxbf_list.append(rxbf_idxs.item())
+                txbf_idxs = int(action[0].item() * 60) + 60
+                rxbf_idxs = int(action[1].item() * 60) + 60
+
+                txbf_list.append(txbf_idxs)
+                rxbf_list.append(rxbf_idxs)
+
+                # txbf_list.append(txbf_idxs)
+                # rxbf_list.append(rxbf_idxs)
 
                 # 1. observationsRDA: [frame, range, Doppler, ant]
-                rewards = data_dict_batch['rewards_PSINR'][0, txbf_idxs.item()]
+                rewards = data_dict_batch['rewards_PSINR'][0, txbf_idxs]
 
                 reward_list.append(rewards.item())
 
-                isDone = data_dict_batch['terminals'][0, txbf_idxs.item()]
+                isDone = data_dict_batch['terminals'][0, txbf_idxs]
 
                 # break
                 if (isDone.cpu().item() != 0):
@@ -149,30 +161,34 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, mmWave_dopp
                 # next_observationsRDA_buffer = torch.clone(
                 #     data_dict_batch['observationsRDA'][0, txbf_idxs.item(), :mmWave_frame_dim,...]).to(device, non_blocking=True)
                 next_observationsRDA_buffer = torch.clone(
-                    data_dict_batch['observationsRDA'][0, txbf_idxs.item(), :mmWave_frame_dim, :mmWave_range_dim,
+                    data_dict_batch['observationsRDA'][0, txbf_idxs, :mmWave_frame_dim, :mmWave_range_dim,
                     int(2 * mmWave_doppler_dim / 4):int(2 * mmWave_doppler_dim * 3 / 4), :]).to(device,
                                                                                                 non_blocking=True)
 
                 # 2. action RXBF, rx antenna is 16
-                mmWave_WX = torch.sin(rxbf_idxs * torch.pi / 180.0).to(device, non_blocking=True)
+                mmWave_WX = torch.sin(torch.tensor(rxbf_idxs) * torch.pi / 180.0).to(device, non_blocking=True)
                 real_part = torch.cos(-2 * torch.pi * mmWave_f0 * mmWave_d * mmWave_D_BF * mmWave_WX).to(device,
                                                                                                          non_blocking=True)
                 imag_part = torch.sin(-2 * torch.pi * mmWave_f0 * mmWave_d * mmWave_D_BF * mmWave_WX).to(device,
                                                                                                          non_blocking=True)
                 mmWave_RXBF_V = torch.exp(1j * (real_part + imag_part)).to('cuda')
-                next_observationsRDA_buffer = next_observationsRDA_buffer * mmWave_RXBF_V
-                next_observationsRDA_buffer = torch.fft.fft(next_observationsRDA_buffer, mmWave_angle_dim, axis=-1).to(
-                    device, non_blocking=True)
+                # next_observationsRDA_buffer = next_observationsRDA_buffer * mmWave_RXBF_V
+                # next_observationsRDA_buffer = torch.fft.fft(next_observationsRDA_buffer, mmWave_angle_dim, axis=-1).to(
+                #     device, non_blocking=True)
+
+                next_observationsRDA_buffer = torch.matmul(next_observationsRDA_buffer, mmWave_RXBF_V).unsqueeze(-1)
 
                 next_observationsRDA_buffer = 10 * torch.log10(torch.abs(next_observationsRDA_buffer) + 1e-8).to(device,
                                                                                                                  non_blocking=True)
 
                 # 3. Normalize
                 next_observationsRDA_buffer = (next_observationsRDA_buffer -
-                    next_observationsRDA_buffer.min()) / (next_observationsRDA_buffer.max()-next_observationsRDA_buffer.min()+1e-3)
+                                               next_observationsRDA_buffer.min()) / (
+                                                          next_observationsRDA_buffer.max() - next_observationsRDA_buffer.min() + 1e-3)
 
-                next_observationsRDA_buffer = next_observationsRDA_buffer.permute(2, 0, 1,
-                                                                                  3)  # [F,R,D,A]] --> [D,F,R,A]
+                # next_observationsRDA_buffer = next_observationsRDA_buffer.permute(1, 2, 0,
+                #                                                                   3)  # [F,R,D,A]] --> [D,F,R,A]
+                next_observationsRDA_buffer = torch.squeeze(next_observationsRDA_buffer)
 
                 next_observationsRDA = V(next_observationsRDA_buffer)
                 # print('next_buffer:', next_observationsRDA_buffer[0,0,0,:])
@@ -194,9 +210,11 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, mmWave_dopp
             final_reward_sample = rewards
             final_txbfs = txbf_idxs
             final_rxbfs = rxbf_idxs
+            step_batch.append(step)
 
             print('\n######################################')
             print(f'sample name: {file_name}')
+            print('total count:',count)
             print(f'txbf: {txbf_list}')
             print(f'rxbf: {rxbf_list}')
             print(f'reward: {reward_list}')
@@ -210,8 +228,8 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, mmWave_dopp
 
             logger.log('eval/avg_reward_sample', avg_reward_sample.item(), eval_sample_num)
             logger.log('eval/final_reward_sample', final_reward_sample.item(), eval_sample_num)
-            logger.log('eval/final_txbfs_sample', final_txbfs.item(), eval_sample_num)
-            logger.log('eval/final_rxbfs_sample', final_rxbfs.item(), eval_sample_num)
+            logger.log('eval/final_txbfs_sample', final_txbfs, eval_sample_num)
+            logger.log('eval/final_rxbfs_sample', final_rxbfs, eval_sample_num)
 
             lengths_batch.append(step)
             avg_reward_batch.append(avg_reward_sample)
@@ -231,6 +249,7 @@ def eval_policy(args, iter, logger: Logger, policy, test_dataloader, mmWave_dopp
     logger.log('eval/avg_reward_std', np.std(avg_reward_eval), iter)
 
     logger.log('eval/final_reward', np.mean(final_reward_eval), iter)
+    logger.log('eval/avg_steps', np.mean(step_batch), iter)
 
     final_reward_eval = np.mean(final_reward_eval)
 
